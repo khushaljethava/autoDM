@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   jar.delete("ig_oauth_state");
   if (!expected || p.get("state") !== expected) done("Login expired or was tampered with; try again");
   if (p.get("error")) done(`Instagram said: ${p.get("error_description") ?? p.get("error")}`);
-  const code = p.get("code");
+  const code = p.get("code")?.replace(/#_$/, ""); // Meta docs: strip the trailing "#_"
+  console.log("[instagram/callback] params", [...p.keys()], "code length", code?.length, "host", req.nextUrl.host);
   if (!code) return done("No authorization code returned");
 
   let msg = "Instagram connected";

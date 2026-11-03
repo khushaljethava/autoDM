@@ -98,7 +98,7 @@ const env = (k: string) => {
 };
 
 export function authorizeUrl(state: string) {
-  const p = new URLSearchParams({ client_id: env("META_APP_ID"), redirect_uri: env("META_REDIRECT_URI"), response_type: "code", scope: SCOPES, state, force_reauth: "true" }); // always show IG login so the owner picks the right account
+  const p = new URLSearchParams({ client_id: env("META_APP_ID"), redirect_uri: env("META_REDIRECT_URI"), response_type: "code", scope: SCOPES, state });
   return `https://www.instagram.com/oauth/authorize?${p}`;
 }
 
