@@ -3,7 +3,7 @@ import { decrypt } from "./crypto";
 
 export const GRAPH = "https://graph.instagram.com/v23.0";
 export const SCOPES = "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments";
-const WEBHOOK_FIELDS = "comments,messages,messaging_postbacks";
+export const WEBHOOK_FIELDS = "comments,messages,messaging_postbacks";
 
 export class MetaError extends Error {
   constructor(message: string, public code?: number) {

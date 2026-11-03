@@ -8,6 +8,7 @@ import { createSession, destroySession, login, requireOwner } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
 import { isHttpUrl, parseKeywords } from "@/lib/match";
 import { listMedia, subscribeWebhooks, type Account } from "@/lib/instagram";
+import { retryEvents } from "@/lib/engine";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const back = (path: string, msg: string): never => redirect(`${path}?msg=${encodeURIComponent(msg)}`);
@@ -29,6 +30,7 @@ export async function changePasswordAction(f: FormData) {
   const row = await one<{ password_hash: string }>("SELECT password_hash FROM owner_users WHERE id = ?", [owner.id]);
   if (!row || !(await verify(row.password_hash, current).catch(() => false))) back("/settings", "Current password is wrong");
   if (next.length < 12) back("/settings", "New password must be at least 12 characters");
+  if (next !== String(f.get("confirm") ?? "")) back("/settings", "New passwords don't match");
   await run("UPDATE owner_users SET password_hash = ?, updated_at = ? WHERE id = ?", [await hash(next), Date.now(), owner.id]);
   await run("DELETE FROM sessions WHERE owner_id = ?", [owner.id]); // sign out everywhere else
   await createSession(owner.id);
@@ -122,6 +124,13 @@ export async function deleteAutomation(f: FormData) {
     "write",
   );
   revalidatePath("/automations");
+}
+
+export async function retryFailedEvents() {
+  await requireOwner();
+  const n = await retryEvents();
+  revalidatePath("/logs");
+  redirect(`/logs?msg=${encodeURIComponent(n ? `Retried ${n} event${n === 1 ? "" : "s"}` : "Nothing to retry")}`);
 }
 
 // ── Instagram ────────────────────────────────────────────────────────────────
