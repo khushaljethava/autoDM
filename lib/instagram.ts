@@ -14,6 +14,8 @@ export class MetaError extends Error {
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(10_000) });
   const data = await res.json().catch(() => ({}));
+  // Log host+path only: the query string carries access_token / client_secret.
+  if (!res.ok || data.error) { const u = new URL(url); console.error(`[instagram] ${init?.method ?? "GET"} ${u.host}${u.pathname} → ${res.status}`, JSON.stringify(data)); }
   // Graph API errors: { error: { message, code } }. api.instagram.com OAuth errors: { error_message, code }.
   if (!res.ok || data.error) throw new MetaError(data.error?.message ?? data.error_message ?? `HTTP ${res.status}`, data.error?.code ?? data.code);
   return data as T;

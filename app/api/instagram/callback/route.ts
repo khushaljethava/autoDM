@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
     );
     await subscribeWebhooks(me.user_id, token).catch(() => (msg = "Connected, but webhook subscription failed; use “Resubscribe” in settings"));
   } catch (e) {
-    msg = `Connection failed: ${e instanceof Error ? e.message : "unknown error"}`.slice(0, 300);
+    console.error("[instagram/callback] connect failed", { redirect_uri: process.env.META_REDIRECT_URI?.trim(), app_id: process.env.META_APP_ID?.trim() }, e);
+    msg =`Connection failed: ${e instanceof Error ? e.message : "unknown error"}`.slice(0, 300);
   }
   done(msg);
 }
