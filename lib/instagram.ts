@@ -89,7 +89,7 @@ export async function listMedia(a: Account): Promise<Media[]> {
 // ── OAuth ────────────────────────────────────────────────────────────────────
 
 const env = (k: string) => {
-  const v = process.env[k];
+  const v = process.env[k]?.trim(); // pasted dashboard values often carry a trailing newline
   if (!v) throw new Error(`Missing env ${k}`);
   return v;
 };

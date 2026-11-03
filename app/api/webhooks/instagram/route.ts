@@ -15,7 +15,7 @@ export function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const raw = Buffer.from(await req.arrayBuffer());
   // Instagram-Login apps can sign with the Instagram app secret or the Facebook app secret.
-  const secrets = [process.env.META_APP_SECRET, process.env.META_FB_APP_SECRET].filter((s): s is string => !!s);
+  const secrets = [process.env.META_APP_SECRET, process.env.META_FB_APP_SECRET].map((s) => s?.trim()).filter((s): s is string => !!s);
   if (!verifySignature(raw, req.headers.get("x-hub-signature-256"), secrets)) return new Response("Invalid signature", { status: 401 });
 
   let body: WebhookBody;
