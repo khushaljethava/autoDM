@@ -14,7 +14,8 @@ export class MetaError extends Error {
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, cache: "no-store", signal: AbortSignal.timeout(10_000) });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) throw new MetaError(data.error?.message ?? `HTTP ${res.status}`, data.error?.code);
+  // Graph API errors: { error: { message, code } }. api.instagram.com OAuth errors: { error_message, code }.
+  if (!res.ok || data.error) throw new MetaError(data.error?.message ?? data.error_message ?? `HTTP ${res.status}`, data.error?.code ?? data.code);
   return data as T;
 }
 
@@ -95,7 +96,7 @@ const env = (k: string) => {
 };
 
 export function authorizeUrl(state: string) {
-  const p = new URLSearchParams({ client_id: env("META_APP_ID"), redirect_uri: env("META_REDIRECT_URI"), response_type: "code", scope: SCOPES, state });
+  const p = new URLSearchParams({ client_id: env("META_APP_ID"), redirect_uri: env("META_REDIRECT_URI"), response_type: "code", scope: SCOPES, state, force_reauth: "true" }); // always show IG login so the owner picks the right account
   return `https://www.instagram.com/oauth/authorize?${p}`;
 }
 
