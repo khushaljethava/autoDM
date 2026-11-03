@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireOwner } from "@/lib/auth";
 import { run } from "@/lib/db";
-import { encrypt } from "@/lib/crypto";
+import { encrypt, sha256 } from "@/lib/crypto";
 import { exchangeCode, getMe, subscribeWebhooks } from "@/lib/instagram";
 
 const done = (msg: string): never => redirect(`/settings?msg=${encodeURIComponent(msg)}`);
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     );
     await subscribeWebhooks(me.user_id, token).catch(() => (msg = "Connected, but webhook subscription failed; use “Resubscribe” in settings"));
   } catch (e) {
-    console.error("[instagram/callback] connect failed", { redirect_uri: process.env.META_REDIRECT_URI?.trim(), app_id: process.env.META_APP_ID?.trim() }, e);
+    console.error("[instagram/callback] connect failed", { redirect_uri: process.env.META_REDIRECT_URI?.trim(), app_id: process.env.META_APP_ID?.trim(), secret_sha256_8: sha256(process.env.META_APP_SECRET?.trim() ?? "").slice(0, 8) }, e);
     msg =`Connection failed: ${e instanceof Error ? e.message : "unknown error"}`.slice(0, 300);
   }
   done(msg);
