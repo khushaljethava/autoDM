@@ -9,6 +9,7 @@ import { decrypt } from "@/lib/crypto";
 import { isHttpUrl, parseKeywords } from "@/lib/match";
 import { listMedia, subscribeWebhooks, type Account } from "@/lib/instagram";
 import { retryEvents } from "@/lib/engine";
+import { deleteZernioAutomation, setZernioActive, syncAutomation, zernioEnabled, type AutomationFields } from "@/lib/zernio";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const back = (path: string, msg: string): never => redirect(`${path}?msg=${encodeURIComponent(msg)}`);
@@ -103,19 +104,34 @@ export async function saveAutomation(f: FormData) {
     ],
     "write",
   );
+  if (zernioEnabled()) {
+    // Zernio does the actual replying; a failed sync keeps the local copy and says so.
+    const row = (await one<AutomationFields & { zernio_id: string | null }>("SELECT * FROM automations WHERE id = ?", [automationId]))!;
+    try {
+      const zid = await syncAutomation(row, keywords, row.zernio_id);
+      if (zid !== row.zernio_id) await run("UPDATE automations SET zernio_id = ? WHERE id = ?", [zid, automationId]);
+    } catch (e) {
+      back(`/automations/${automationId}`, `Saved here, but not synced to Zernio: ${(e as Error).message}`.slice(0, 300));
+    }
+  }
   revalidatePath("/automations");
   redirect("/automations");
 }
 
 export async function toggleAutomation(f: FormData) {
   await requireOwner();
-  await run("UPDATE automations SET is_active = 1 - is_active, updated_at = ? WHERE id = ?", [Date.now(), Number(str(f, "id"))]);
+  const id = Number(str(f, "id"));
+  await run("UPDATE automations SET is_active = 1 - is_active, updated_at = ? WHERE id = ?", [Date.now(), id]);
+  const row = await one<{ is_active: number; zernio_id: string | null }>("SELECT is_active, zernio_id FROM automations WHERE id = ?", [id]);
+  if (zernioEnabled() && row?.zernio_id) await setZernioActive(row.zernio_id, !!row.is_active);
   revalidatePath("/automations");
 }
 
 export async function deleteAutomation(f: FormData) {
   await requireOwner();
   const id = Number(str(f, "id"));
+  const z = await one<{ zernio_id: string | null }>("SELECT zernio_id FROM automations WHERE id = ?", [id]);
+  if (zernioEnabled() && z?.zernio_id) await deleteZernioAutomation(z.zernio_id); // stop it replying before we forget it
   // Explicit deletes: SQLite foreign-key cascades depend on a per-connection pragma.
   await db.batch(
     ["automation_keywords", "dm_logs", "verification_attempts"]

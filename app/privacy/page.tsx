@@ -28,7 +28,7 @@ export default function PrivacyPage() {
       <p className="mt-2">Only to run the automations the account owner sets up: matching comments to keywords, replying, sending the requested direct messages, and showing the owner an activity log. We do not use it for advertising or profiling.</p>
 
       <h2 className={h2}>Sharing</h2>
-      <p className="mt-2">We do not sell or share this data. It is sent only to Meta’s Instagram API to deliver replies and messages, and stored with our hosting and database providers (Vercel and Turso) to run the service.</p>
+      <p className="mt-2">We do not sell or share this data. It is sent only to Meta’s Instagram API and to Zernio, the messaging provider that delivers our replies and messages through that API, and stored with our hosting and database providers (Vercel and Turso) to run the service.</p>
 
       <h2 className={h2}>Retention</h2>
       <p className="mt-2">Data is kept while the account stays connected and automations are in use. Disconnecting the account removes its access token. You can ask us to delete your data at any time.</p>

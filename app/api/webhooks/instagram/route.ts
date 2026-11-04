@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ingest, type WebhookBody } from "@/lib/engine";
 import { verifySignature } from "@/lib/match";
+import { zernioEnabled } from "@/lib/zernio";
 
 export const maxDuration = 60;
 
@@ -13,6 +14,8 @@ export function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Zernio answers comments when it's configured; running our engine too would DM people twice.
+  if (zernioEnabled()) return new Response("EVENT_RECEIVED");
   const raw = Buffer.from(await req.arrayBuffer());
   // Instagram-Login apps can sign with the Instagram app secret or the Facebook app secret.
   const secrets = [process.env.META_APP_SECRET, process.env.META_FB_APP_SECRET].map((s) => s?.trim()).filter((s): s is string => !!s);
