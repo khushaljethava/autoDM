@@ -7,14 +7,15 @@ import type { Media } from "@/lib/instagram";
 import { DmPreview } from "@/components/DmPreview";
 import { Icon } from "@/components/Icon";
 import { btnGhost, btnPrimary, Field, Flash, input, Toggle } from "@/components/ui";
+import { TEMPLATES, type Template } from "@/lib/templates";
 
 const DEFAULTS = {
   initial_message: "Thanks for commenting, {username}! Tap below and I'll send it over 👇",
   button_label: "Send me the link",
   content_message: "Here you go! 🎉",
   link_button_label: "Open link",
-  not_following_message: "This one's for followers 💛 Follow the account, then tap “I've followed” and I'll check again.",
-  verification_error_message: "I couldn't check that just now. Give it a minute and tap “Try again”.",
+  not_following_message: "Looks like you're not following yet 💛 Tap View profile, hit Follow, then come back and tap I've followed to get it.",
+  verification_error_message: "I couldn't check that just now. Give it a minute and tap I've followed again.",
 };
 
 const TRIGGERS = [
@@ -46,13 +47,14 @@ function Section({ title, desc, action, children }: { title: string; desc?: stri
 
 const choice = "block h-full cursor-pointer rounded-xl border border-border bg-raised p-4 transition hover:border-white/15 has-checked:border-accent has-checked:bg-accent/10";
 
-export function AutomationForm({ a, media, mediaError, msg, username }: { a?: Automation; media: Media[]; mediaError?: string; msg?: string; username: string }) {
-  const v = (k: keyof typeof DEFAULTS) => a?.[k] ?? DEFAULTS[k];
+export function AutomationForm({ a, t, media, mediaError, msg, username }: { a?: Automation; t?: Template; media: Media[]; mediaError?: string; msg?: string; username: string }) {
+  const v = (k: keyof typeof DEFAULTS) => a?.[k] ?? t?.[k] ?? DEFAULTS[k];
   const trigger = a?.trigger_type ?? "comment";
   const selectedMedia = a?.media_id ?? "any";
 
   return (
-    <form id="automation-form" action={saveAutomation} className="space-y-6">
+    // key: picking a template remounts the form so its default values apply
+    <form key={t?.key ?? "blank"} id="automation-form" action={saveAutomation} className="space-y-6">
       {a && <input type="hidden" name="id" value={a.id} />}
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
@@ -69,11 +71,32 @@ export function AutomationForm({ a, media, mediaError, msg, username }: { a?: Au
 
       <Flash msg={msg} />
 
+      {!a && (
+        <Section title="Start from a template" desc="Fills in the keywords, replies and every DM. Edit anything before saving.">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {TEMPLATES.map((x) => (
+              <Link key={x.key} href={`/automations/new?template=${x.key}`} aria-current={t?.key === x.key ? "true" : undefined}
+                className={`block rounded-xl border p-4 transition hover:border-white/15 ${t?.key === x.key ? "border-accent bg-accent/10" : "border-border bg-raised"}`}>
+                <span className="text-xl" aria-hidden>{x.emoji}</span>
+                <span className="mt-2 block text-sm font-medium">{x.title}</span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted">{x.blurb}</span>
+                <span className="mt-2 block font-mono text-[11px] text-muted">{x.keywords}</span>
+              </Link>
+            ))}
+            {t && (
+              <Link href="/automations/new" className="flex items-center justify-center rounded-xl border border-dashed border-border p-4 text-sm text-muted hover:text-foreground">
+                Start blank instead
+              </Link>
+            )}
+          </div>
+        </Section>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-6">
           <Section title="Name & status" desc="A name you'll recognise in the list. Paused automations ignore all events." action={<Toggle name="is_active" defaultChecked={a ? !!a.is_active : true} label="Active" />}>
             <Field label="Automation name">
-              <input name="name" required maxLength={80} defaultValue={a?.name} placeholder="Free guide – summer Reel" className={input} />
+              <input name="name" required maxLength={80} defaultValue={a?.name ?? t?.name} placeholder="Free guide – summer Reel" className={input} />
             </Field>
           </Section>
 
@@ -95,13 +118,13 @@ export function AutomationForm({ a, media, mediaError, msg, username }: { a?: Au
 
           <Section title="Trigger keywords" desc="Case-insensitive. Separate with commas.">
             <div className="space-y-4">
-              <input name="keywords" defaultValue={a?.keywords?.split("\n").join(", ")} placeholder="GUIDE, EBOOK, PDF" className={`${input} font-mono uppercase placeholder:normal-case`} />
+              <input name="keywords" defaultValue={a?.keywords?.split("\n").join(", ") ?? t?.keywords} placeholder="GUIDE, EBOOK, PDF" className={`${input} font-mono uppercase placeholder:normal-case`} />
               <div>
                 <p className="mb-2 text-xs font-medium text-muted">Matching mode</p>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {MODES.map(([value, title, desc]) => (
                     <label key={value} className={`${choice} p-3`}>
-                      <input type="radio" name="match_mode" value={value} defaultChecked={(a?.match_mode ?? "exact") === value} className="sr-only" />
+                      <input type="radio" name="match_mode" value={value} defaultChecked={(a?.match_mode ?? t?.match_mode ?? "exact") === value} className="sr-only" />
                       <span className="block text-sm font-medium">{title}</span>
                       <span className="block text-xs text-muted">{desc}</span>
                     </label>
@@ -149,7 +172,7 @@ export function AutomationForm({ a, media, mediaError, msg, username }: { a?: Au
                 <input name="button_label" maxLength={20} defaultValue={v("button_label")} className={input} />
               </Field>
               <Field label="Public comment replies (optional)" hint="One per line; a random one is posted under the comment.">
-                <textarea name="comment_replies" rows={3} defaultValue={a?.comment_replies} placeholder={"Sent! Check your DMs 📬\nJust DMed you {username} ✨"} className={input} />
+                <textarea name="comment_replies" rows={3} defaultValue={a?.comment_replies ?? t?.comment_replies} placeholder={"Sent! Check your DMs 📬\nJust DMed you {username} ✨"} className={input} />
               </Field>
             </div>
           </Section>
@@ -176,10 +199,10 @@ export function AutomationForm({ a, media, mediaError, msg, username }: { a?: Au
             action={<Toggle name="require_follow" defaultChecked={a ? !!a.require_follow : true} label="Only deliver to followers" />}
           >
             <div className="space-y-4">
-              <Field label="If not following" hint="Sent with “Visit profile” and “I've followed” buttons.">
+              <Field label="If not following" hint="Sent with “View profile” (opens your profile) and “I've followed” (checks again) buttons.">
                 <textarea name="not_following_message" rows={2} maxLength={640} defaultValue={v("not_following_message")} className={input} />
               </Field>
-              <Field label="If the check fails" hint="Sent with a “Try again” button.">
+              <Field label="If the check fails" hint="When Instagram won't answer. Sent with the same two buttons.">
                 <textarea name="verification_error_message" rows={2} maxLength={640} defaultValue={v("verification_error_message")} className={input} />
               </Field>
             </div>

@@ -11,7 +11,7 @@ export const maxDuration = 60;
 type Payload = {
   id: string;
   event: string;
-  account?: { accountId?: string };
+  account?: { accountId?: string; username?: string };
   message?: {
     conversationId: string;
     direction?: string;
@@ -99,7 +99,12 @@ async function handleTap(p: Payload, automationId: number) {
   await run("INSERT INTO verification_attempts (automation_id, instagram_user_id, status, api_error_code, created_at) VALUES (?, ?, ?, ?, ?)", [a.id, user.id, check, isFollower === null ? (reason ?? null) : null, now]);
 
   // Follower → content. Not following / unknown → the matching message, with a button to check again.
-  const retry = [{ type: "postback", title: RETRY_TITLE, payload: GATE_PREFIX + a.id }];
+  // Not following yet: one button opens the profile to follow, the other checks again when they're back.
+  const handle = p.account?.username;
+  const retry = [
+    ...(handle ? [{ type: "url", title: "View profile", url: `https://www.instagram.com/${encodeURIComponent(handle)}/` }] : []),
+    { type: "postback", title: RETRY_TITLE, payload: GATE_PREFIX + a.id },
+  ];
   const [type, text, buttons] =
     isFollower === true ? (["content", a.content_message, contentButtons(a)] as const)
     : isFollower === false ? (["not_following", a.not_following_message, retry] as const)
