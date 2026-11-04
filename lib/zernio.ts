@@ -44,16 +44,19 @@ export type AutomationFields = {
  * AutoDM's flow is: opening DM with a button → tap → (follow check) → content DM with a link button.
  * Zernio's follow gate is exactly that: followGate.message + button first, real dmMessage on the tap.
  */
+// AutoDM writes {username} (rendered as @handle); Zernio's placeholder is {{username}}.
+const tpl = (s: string) => s.replace(/(?<!\{)\{username\}(?!\})/g, "@{{username}}");
+
 export function toZernio(a: AutomationFields, keywords: string[]) {
-  const replies = a.comment_replies.split("\n").map((s) => s.trim()).filter(Boolean);
-  const followGate = { message: a.initial_message.slice(0, 640), buttonLabel: a.button_label.slice(0, 20), ...(a.require_follow ? { notFollowingMessage: a.not_following_message.slice(0, 1000) } : {}) };
+  const replies = a.comment_replies.split("\n").map((s) => tpl(s.trim())).filter(Boolean);
+  const followGate = { message: tpl(a.initial_message).slice(0, 640), buttonLabel: a.button_label.slice(0, 20), ...(a.require_follow ? { notFollowingMessage: tpl(a.not_following_message).slice(0, 1000) } : {}) };
   return {
     name: a.name,
     trigger: a.trigger_type === "story_reply" ? "story_reply" : "comment",
     ...(a.trigger_type === "comment" && a.media_id ? { platformPostId: a.media_id, postTitle: a.media_caption ?? undefined } : {}),
     keywords: a.match_mode === "any" ? [] : keywords, // empty = any comment
     matchMode: a.match_mode === "exact" ? "exact" : "contains",
-    dmMessage: a.content_message.slice(0, a.content_url ? 640 : 1000),
+    dmMessage: tpl(a.content_message).slice(0, a.content_url ? 640 : 1000),
     buttons: a.content_url ? [{ type: "url", title: a.link_button_label.slice(0, 20), url: a.content_url }] : [],
     ...(replies.length ? { commentReply: replies[0], commentReplyVariations: replies.slice(1, 6) } : {}),
     // Gate on: verify the follow on tap. Gate off: still send the opening DM first, content on tap.

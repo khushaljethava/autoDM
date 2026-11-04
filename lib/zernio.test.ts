@@ -34,6 +34,14 @@ test("no gate, any post, any comment, no link", () => {
   assert.equal(b.isActive, false);
 });
 
+test("{username} becomes Zernio's {{username}} everywhere", () => {
+  const b = toZernio({ ...base, initial_message: "Hi {username}!", content_message: "For {username}", comment_replies: "Thanks {username}" }, ["x"]);
+  assert.equal(b.followGate.message, "Hi @{{username}}!");
+  assert.equal(b.dmMessage, "For @{{username}}");
+  assert.equal(b.commentReply, "Thanks @{{username}}");
+  assert.equal(toZernio({ ...base, initial_message: "Hi {{username}}" }, ["x"]).followGate.message, "Hi {{username}}"); // already Zernio syntax: untouched
+});
+
 test("story reply ignores the post id", () => {
   const b = toZernio({ ...base, trigger_type: "story_reply" }, ["x"]);
   assert.equal(b.trigger, "story_reply");
