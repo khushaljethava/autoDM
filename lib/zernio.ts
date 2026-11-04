@@ -24,6 +24,7 @@ async function z<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 /** The AutoDM fields that map onto a Zernio automation. */
 export type AutomationFields = {
+  id: number;
   name: string;
   trigger_type: "comment" | "dm" | "story_reply";
   media_id: string | null;
@@ -40,30 +41,61 @@ export type AutomationFields = {
   is_active: number;
 };
 
+/** Postback payload on the opening DM's button; the tap comes back to /api/webhooks/zernio. */
+export const GATE_PREFIX = "autodm:gate:";
+
 /**
  * AutoDM's flow is: opening DM with a button → tap → (follow check) → content DM with a link button.
- * Zernio's follow gate is exactly that: followGate.message + button first, real dmMessage on the tap.
+ * Gate on: Zernio's own gate trusts a cached "follower" and skips the tap, so instead Zernio sends
+ * everyone the opening DM with a postback button and AutoDM re-checks the follow live on each tap.
+ * Gate off: Zernio's tapToUnlock is exactly the flow (opening DM, content on tap, no check).
  */
 // AutoDM writes {username} (rendered as @handle); Zernio's placeholder is {{username}}.
 const tpl = (s: string) => s.replace(/(?<!\{)\{username\}(?!\})/g, "@{{username}}");
 
 export function toZernio(a: AutomationFields, keywords: string[]) {
   const replies = a.comment_replies.split("\n").map((s) => tpl(s.trim())).filter(Boolean);
-  const followGate = { message: tpl(a.initial_message).slice(0, 640), buttonLabel: a.button_label.slice(0, 20), ...(a.require_follow ? { notFollowingMessage: tpl(a.not_following_message).slice(0, 1000) } : {}) };
+  const followGate = { message: tpl(a.initial_message).slice(0, 640), buttonLabel: a.button_label.slice(0, 20) };
   return {
     name: a.name,
     trigger: a.trigger_type === "story_reply" ? "story_reply" : "comment",
     ...(a.trigger_type === "comment" && a.media_id ? { platformPostId: a.media_id, postTitle: a.media_caption ?? undefined } : {}),
     keywords: a.match_mode === "any" ? [] : keywords, // empty = any comment
     matchMode: a.match_mode === "exact" ? "exact" : "contains",
-    dmMessage: tpl(a.content_message).slice(0, a.content_url ? 640 : 1000),
-    buttons: a.content_url ? [{ type: "url", title: a.link_button_label.slice(0, 20), url: a.content_url }] : [],
     ...(replies.length ? { commentReply: replies[0], commentReplyVariations: replies.slice(1, 6) } : {}),
-    // Gate on: verify the follow on tap. Gate off: still send the opening DM first, content on tap.
-    audience: a.require_follow ? { followerStatus: "follower", whenUnknown: "verify" } : { tapToUnlock: true },
-    followGate,
+    ...(a.require_follow
+      ? {
+          dmMessage: tpl(a.initial_message).slice(0, 640),
+          buttons: [{ type: "postback", title: a.button_label.slice(0, 20), payload: GATE_PREFIX + a.id }],
+          audience: { followerStatus: "any", whenUnknown: "send" }, // explicit, so a PATCH clears an older gate
+        }
+      : {
+          dmMessage: tpl(a.content_message).slice(0, a.content_url ? 640 : 1000),
+          buttons: contentButtons(a),
+          audience: { tapToUnlock: true },
+          followGate,
+        }),
     isActive: !!a.is_active,
   };
+}
+
+export const contentButtons = (a: Pick<AutomationFields, "content_url" | "link_button_label">) =>
+  a.content_url ? [{ type: "url", title: a.link_button_label.slice(0, 20), url: a.content_url }] : [];
+
+/** Live follow check (refresh=true skips Zernio's cache). null = Instagram wouldn't say. */
+export async function followStatus(accountId: string, igsid: string): Promise<{ isFollower: boolean | null; reason?: string | null }> {
+  const r = await z<{ isFollower: boolean | null; unavailableReason?: string | null }>(`/accounts/${accountId}/follow-status/${encodeURIComponent(igsid)}?refresh=true`);
+  return { isFollower: r.isFollower, reason: r.unavailableReason };
+}
+
+export type DmButton = { type: string; title: string; url?: string; payload?: string };
+
+export async function sendDm(conversationId: string, accountId: string, message: string, buttons: DmButton[] = []): Promise<string | null> {
+  const r = await z<{ data?: { messageId?: string; id?: string } }>(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ accountId, message: message.slice(0, buttons.length ? 640 : 1000), ...(buttons.length ? { buttons } : {}) }),
+  });
+  return r.data?.messageId ?? r.data?.id ?? null;
 }
 
 type ZAccount = { _id: string; platform: string; profileId?: string | { _id: string } };
