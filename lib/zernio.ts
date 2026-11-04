@@ -94,6 +94,28 @@ export async function syncAutomation(a: AutomationFields, keywords: string[], ze
   return r.automation.id;
 }
 
+export type ZernioLog = {
+  id: string;
+  commenterUsername?: string;
+  commentText?: string;
+  source?: string;
+  status: string; // sent | failed | skipped | pending …
+  error?: string | null;
+  platformError?: string | null;
+  audienceOutcome?: string | null; // passed | gate_passed | skipped …
+  gateButtonStatus?: string | null;
+  commenterIsFollower?: boolean | null;
+  commentReplyStatus?: string | null;
+  clickCount?: number;
+  createdAt: string;
+};
+
+/** Latest trigger log rows for one automation (newest first, as Zernio returns them). */
+export async function zernioLogs(zernioId: string): Promise<ZernioLog[]> {
+  const r = await z<{ logs?: ZernioLog[] }>(`/comment-automations/${zernioId}/logs`);
+  return r.logs ?? [];
+}
+
 export async function setZernioActive(zernioId: string, isActive: boolean) {
   await z(`/comment-automations/${zernioId}`, { method: "PATCH", body: JSON.stringify({ isActive }) });
 }

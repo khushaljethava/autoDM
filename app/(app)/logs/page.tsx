@@ -4,6 +4,17 @@ import { all, one } from "@/lib/db";
 import { retryFailedEvents } from "@/app/actions";
 import { Icon } from "@/components/Icon";
 import { Badge, btnGhost, countChip, fmt, Keyword, MESSAGE_LABEL, MessageStatus, Metric, msAgo, PageHeader, pct, statusTone } from "@/components/ui";
+import { zernioEnabled, zernioLogs, type ZernioLog } from "@/lib/zernio";
+
+// Zernio sends the DMs when it's configured, so its trigger logs are the real activity.
+async function zernioActivity() {
+  if (!zernioEnabled()) return null;
+  const autos = await all<{ name: string; zernio_id: string }>("SELECT name, zernio_id FROM automations WHERE zernio_id IS NOT NULL");
+  const lists = await Promise.all(autos.map((a) => zernioLogs(a.zernio_id).then((ls) => ls.map((l) => ({ ...l, name: a.name }))).catch(() => [])));
+  return lists.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200) as (ZernioLog & { name: string })[];
+}
+
+const GATE_LABEL: Record<string, string> = { passed: "Follower", gate_passed: "Follow confirmed", skipped: "Skipped" };
 
 const FILTERS = {
   all: ["All activity", ""],
@@ -24,7 +35,8 @@ export default async function Logs({ searchParams }: { searchParams: Promise<{ s
   const sp = await searchParams;
   const filter: Filter = sp.status && sp.status in FILTERS ? (sp.status as Filter) : "all";
 
-  const [dms, checks, failed, totals] = await Promise.all([
+  const [zlogs, dms, checks, failed, totals] = await Promise.all([
+    zernioActivity(),
     all<{ created_at: number; name: string; comment_id: string | null; instagram_user_id: string; matched_keyword: string | null; message_type: string; message_status: string; error_message: string | null }>(
       `SELECT l.created_at, a.name, l.comment_id, l.instagram_user_id, l.matched_keyword, l.message_type, l.message_status, l.error_message
        FROM dm_logs l JOIN automations a ON a.id = l.automation_id WHERE 1 = 1 ${FILTERS[filter][1]} ORDER BY l.id DESC LIMIT 200`,
@@ -52,6 +64,37 @@ export default async function Logs({ searchParams }: { searchParams: Promise<{ s
     <>
       <PageHeader title="Activity logs" subtitle="Every message, follower check and failed webhook." />
       {sp.msg && <p className="rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm">{sp.msg}</p>}
+
+      {zlogs && (
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
+          <h2 className="flex items-center gap-2 px-5 py-4 text-sm font-semibold">Zernio activity <span className={countChip}>{zlogs.length}</span></h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-y border-border text-muted">
+                <tr>{["Time", "Automation", "Commenter", "Comment", "Follow check", "DM", "Error / detail"].map((h) => <th key={h} className={`${th} whitespace-nowrap`}>{h}</th>)}</tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {zlogs.map((l) => {
+                  const ms = Date.parse(l.createdAt);
+                  const err = l.error ?? l.platformError;
+                  return (
+                    <tr key={l.id} className={l.status === "failed" ? "bg-red-500/[0.04]" : ""}>
+                      <td className={`${tdc} whitespace-nowrap tabular-nums`} title={fmt(ms)}>{time(ms)}</td>
+                      <td className={tdc}><span className="mr-2 inline-block size-1.5 rounded-full bg-accent align-middle" />{l.name}</td>
+                      <td className={tdc}>{l.commenterUsername ? `@${l.commenterUsername}` : "—"}</td>
+                      <td className={`${tdc} max-w-[220px] truncate`} title={l.commentText ?? ""}>{l.commentText ? <Keyword>{l.commentText}</Keyword> : "—"}</td>
+                      <td className={`${tdc} whitespace-nowrap text-xs`}>{(l.audienceOutcome && GATE_LABEL[l.audienceOutcome]) ?? l.audienceOutcome ?? "—"}</td>
+                      <td className={tdc}><Badge tone={statusTone(l.status === "sent" ? "completed" : l.status)}>{l.status[0].toUpperCase() + l.status.slice(1)}</Badge></td>
+                      <td className={`${tdc} max-w-xs text-xs ${err ? "text-red-400" : "text-muted"}`}>{err ?? (l.clickCount ? `Link clicked ${l.clickCount}×` : "—")}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!zlogs.length && <p className="px-5 py-10 text-center text-sm text-muted">No comments have triggered a Zernio automation yet. Automations sync to Zernio when you save them.</p>}
+          </div>
+        </section>
+      )}
 
       <nav className="inline-flex rounded-lg border border-border bg-card p-1 text-sm" aria-label="Filter messages">
         {(Object.keys(FILTERS) as Filter[]).map((k) => (
