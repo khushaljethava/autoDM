@@ -2,9 +2,9 @@
 // AutoDM re-checks the follow live every time instead of trusting Zernio's cached answer.
 import { createHash } from "node:crypto";
 import { after, type NextRequest } from "next/server";
-import { one, run } from "@/lib/db";
+import { all, one, run } from "@/lib/db";
 import { render, verifySignature } from "@/lib/match";
-import { contentButtons, followStatus, GATE_PREFIX, sendDm } from "@/lib/zernio";
+import { contentButtons, followStatus, GATE_PREFIX, sendDm, zernioLogs } from "@/lib/zernio";
 
 export const maxDuration = 60;
 
@@ -12,8 +12,46 @@ type Payload = {
   id: string;
   event: string;
   account?: { accountId?: string };
-  message?: { conversationId: string; direction?: string; sender?: { id: string; username?: string }; metadata?: { postbackPayload?: string } };
+  message?: {
+    conversationId: string;
+    direction?: string;
+    text?: string | null;
+    platformMessageId?: string;
+    sender?: { id: string; username?: string };
+    metadata?: { postbackPayload?: string };
+  };
 };
+
+const RETRY_TITLE = "I've followed";
+
+/**
+ * Which automation a button tap belongs to. Zernio's docs promise metadata.postbackPayload, but live
+ * comment-automation taps arrive without it: just a "postback_…" message whose text is the button title.
+ */
+async function tappedAutomation(p: Payload): Promise<number | null> {
+  const m = p.message;
+  const payload = m?.metadata?.postbackPayload;
+  if (payload?.startsWith(GATE_PREFIX)) return Number(payload.slice(GATE_PREFIX.length));
+  if (!m?.platformMessageId?.startsWith("postback_") || !m.text || !m.sender?.id) return null;
+
+  if (m.text === RETRY_TITLE) {
+    // Our own "I've followed" button: the automation that last checked this person.
+    const last = await one<{ automation_id: number }>("SELECT automation_id FROM verification_attempts WHERE instagram_user_id = ? ORDER BY id DESC LIMIT 1", [m.sender.id]);
+    return last?.automation_id ?? null;
+  }
+  const hits = await all<{ id: number; zernio_id: string }>(
+    "SELECT id, zernio_id FROM automations WHERE is_active = 1 AND require_follow = 1 AND zernio_id IS NOT NULL AND button_label = ?",
+    [m.text],
+  );
+  if (hits.length <= 1) return hits[0]?.id ?? null;
+  // Same label on several automations: pick the one whose opening DM reached this person last.
+  let best: { id: number; at: string } | null = null;
+  for (const h of hits) {
+    const at = (await zernioLogs(h.zernio_id).catch(() => [])).find((l) => l.commenterId === m.sender!.id)?.createdAt;
+    if (at && (!best || at > best.at)) best = { id: h.id, at };
+  }
+  return best?.id ?? null;
+}
 
 type Gate = { id: number; is_active: number; content_message: string; content_url: string | null; link_button_label: string; not_following_message: string; verification_error_message: string };
 
@@ -33,8 +71,9 @@ export async function POST(req: NextRequest) {
   } catch {
     return new Response("Bad JSON", { status: 400 });
   }
-  const tap = p.message?.metadata?.postbackPayload;
-  if (p.event !== "message.received" || p.message?.direction === "outgoing" || !tap?.startsWith(GATE_PREFIX)) return new Response("ok");
+  if (p.event !== "message.received" || p.message?.direction === "outgoing") return new Response("ok");
+  const automationId = await tappedAutomation(p);
+  if (!automationId) return new Response("ok"); // an ordinary DM, not a gate tap
 
   // Zernio retries until it gets a 2xx: its event id makes each tap run once.
   const r = await run(
@@ -44,7 +83,7 @@ export async function POST(req: NextRequest) {
   );
   if (!r.rowsAffected) return new Response("ok");
 
-  after(() => handleTap(p, Number(tap.slice(GATE_PREFIX.length))).catch((e) => console.error("[zernio/gate] failed", e)));
+  after(() => handleTap(p, automationId).catch((e) => console.error("[zernio/gate] failed", e)));
   return new Response("ok"); // Zernio wants a 2xx within 5 seconds
 }
 
@@ -60,7 +99,7 @@ async function handleTap(p: Payload, automationId: number) {
   await run("INSERT INTO verification_attempts (automation_id, instagram_user_id, status, api_error_code, created_at) VALUES (?, ?, ?, ?, ?)", [a.id, user.id, check, isFollower === null ? (reason ?? null) : null, now]);
 
   // Follower → content. Not following / unknown → the matching message, with a button to check again.
-  const retry = [{ type: "postback", title: "I've followed", payload: GATE_PREFIX + a.id }];
+  const retry = [{ type: "postback", title: RETRY_TITLE, payload: GATE_PREFIX + a.id }];
   const [type, text, buttons] =
     isFollower === true ? (["content", a.content_message, contentButtons(a)] as const)
     : isFollower === false ? (["not_following", a.not_following_message, retry] as const)

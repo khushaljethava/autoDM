@@ -128,6 +128,7 @@ export async function syncAutomation(a: AutomationFields, keywords: string[], ze
 
 export type ZernioLog = {
   id: string;
+  commenterId?: string;
   commenterUsername?: string;
   commentText?: string;
   source?: string;
