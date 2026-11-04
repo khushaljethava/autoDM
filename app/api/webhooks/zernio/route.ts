@@ -1,5 +1,6 @@
 // Zernio webhook: the opening DM's button tap ("autodm:gate:<automationId>") lands here, and
 // AutoDM re-checks the follow live every time instead of trusting Zernio's cached answer.
+import { createHash } from "node:crypto";
 import { after, type NextRequest } from "next/server";
 import { one, run } from "@/lib/db";
 import { render, verifySignature } from "@/lib/match";
@@ -20,7 +21,11 @@ export async function POST(req: NextRequest) {
   const raw = Buffer.from(await req.arrayBuffer());
   const secret = process.env.ZERNIO_WEBHOOK_SECRET?.trim();
   const sig = req.headers.get("x-zernio-signature");
-  if (!secret || !sig || !verifySignature(raw, `sha256=${sig}`, [secret])) return new Response("Invalid signature", { status: 401 });
+  if (!secret || !sig || !verifySignature(raw, `sha256=${sig}`, [secret])) {
+    // Fingerprint only (never the secret) so a mismatch with .env.local is easy to spot.
+    console.error("[zernio] rejected webhook", { hasSecret: !!secret, secretFp: secret ? createHash("sha256").update(secret).digest("hex").slice(0, 8) : null, hasSignature: !!sig });
+    return new Response("Invalid signature", { status: 401 });
+  }
 
   let p: Payload;
   try {
