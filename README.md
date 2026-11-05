@@ -10,12 +10,16 @@ Someone comments on your post or Reel → they get a DM → they tap a button �
 that they actually follow you → only then does the link land in their inbox.
 One owner, one Next.js app, official Meta APIs. No scraping, no browser bots, no Instagram password.
 
+⚡ **Comes with an API:** create an Instagram auto-DM for any post or Reel with one HTTP request,
+straight from Make, Zapier, n8n or your own scripts. [See the Automation API ↓](#-automation-api-create-instagram-auto-dms-programmatically)
+
 `Next.js 16 (one deployment)` · `Turso / libSQL` · `Vercel` · `Instagram API with Instagram Login`
 
 <img src="https://img.shields.io/badge/Next.js-16-000?style=for-the-badge&logo=nextdotjs" alt="Next.js 16" />
 <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
 <img src="https://img.shields.io/badge/Turso-libSQL-4FF8D2?style=for-the-badge&logo=turso&logoColor=black" alt="Turso" />
 <img src="https://img.shields.io/badge/Meta-official_API-E1306C?style=for-the-badge&logo=instagram&logoColor=white" alt="Official Instagram API" />
+<img src="https://img.shields.io/badge/Auto--DM-REST_API-7C3AED?style=for-the-badge&logo=webhooks&logoColor=white" alt="REST API to create Instagram auto-DM automations" />
 
 <img src="docs/screenshots/overview.png" alt="AutoDM dashboard: Instagram comment-to-DM funnel with comments, DMs sent, follower checks and links delivered" width="100%" />
 
@@ -34,6 +38,7 @@ It's a good fit if you want to:
 
 - **Grow Instagram followers** with follow-to-unlock content (presets, guides, discount pages, blog posts)
 - **Automatically send links in Instagram DMs** when people comment on a Reel
+- **Automate the automation**: publish a Reel, then let Make / Zapier / n8n call the API to set up its auto-DM
 - **Run Instagram auto-replies** on comments without paying a monthly per-contact SaaS fee
 - **Keep your data** in your own database on your own Vercel deployment
 
@@ -54,6 +59,50 @@ It's a good fit if you want to:
 - **`{username}` personalization**: greet commenters by their @handle.
 - **Live DM preview**: the automation editor renders an Instagram-style chat preview as you type.
 - **Dashboard**: conversion funnel (comment → DM → request → follow check → delivered), activity logs with filters, follower-check history, failed-webhook list with one-click **Retry now**.
+
+## ⚡ Automation API: create Instagram auto-DMs programmatically
+
+Most comment-to-DM tools make you click through a dashboard for every new post. AutoDM has an **API**: one request
+turns any post or Reel into a working auto-DM. Plug it into your publishing workflow and every new Reel gets its
+DM automation the moment it goes live.
+
+```bash
+curl -X POST https://<your-domain>/api/automations/webhook \
+  -H "Authorization: Bearer $AUTOMATION_WEBHOOK_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{ "post": "17900000000000001", "url": "https://example.com/guide" }'
+```
+
+```json
+{ "ok": true, "action": "created", "id": 12, "media_id": "17900000000000001",
+  "template": "hype", "trigger": "any comment", "zernio_id": "66f0c0ffee0000000000abcd" }
+```
+
+| Field | Required | What it does |
+|---|---|---|
+| `post` | ✅ | The Instagram media id, or the post/Reel link (`instagram.com/p/…`, `/reel/…`) |
+| `url` | ✅ | The link to DM people (must be `http://` or `https://`) |
+| `template` | | `random` (default), `classic`, `hype`, `minimal`, `mystery` or `curious`: the tone of the DMs and comment replies |
+| `name` | | Name shown in the dashboard (defaults to template + caption) |
+
+- **Any comment triggers it**: no keyword to remember, so more people get the DM.
+- **Follow gate on**: the link is only delivered after a live follow check.
+- **Idempotent per post**: calling it again for the same post updates the link instead of creating a duplicate,
+  so retries in Make/Zapier are safe.
+- **Random templates**: without `template`, each automation gets a random tone so your DMs don't all read the same.
+- **Secured**: `Bearer` token compared in constant time; set `AUTOMATION_WEBHOOK_SECRET` in your env.
+
+**No-code recipe (Make / Zapier / n8n):** trigger *"New Instagram media"* → *HTTP request* `POST /api/automations/webhook`
+with `{"post": "{{media.id}}", "url": "{{your link}}"}`. Done: every new Reel is auto-DM-ready.
+
+| Status | Meaning |
+|---|---|
+| `201` / `200` | Automation created / updated |
+| `400` | Missing or invalid `post`, `url` or `template` |
+| `401` | Wrong or missing bearer token |
+| `404` | That post isn't on the connected account |
+| `409` | Instagram isn't connected yet |
+| `502` | Saved in AutoDM but Zernio sync failed (response includes the `id`) |
 
 ## 🛡️ Built to keep your Instagram account safe
 
@@ -231,6 +280,13 @@ gate fails closed. It does one job (comment/DM/story reply → follow check → 
 </details>
 
 <details>
+<summary><b>Can I create Instagram auto-DMs through an API?</b></summary>
+
+Yes. `POST /api/automations/webhook` with a post id (or link) and a URL creates a ready-to-go auto-DM for that
+post. It works from Make, Zapier, n8n, GitHub Actions or any HTTP client. See [Automation API](#-automation-api-create-instagram-auto-dms-programmatically).
+</details>
+
+<details>
 <summary><b>Do I need Meta App Review?</b></summary>
 
 In development mode only accounts with a role on your Meta app trigger it. For the public, either pass App Review for
@@ -260,6 +316,6 @@ delivers comments from anyone.
 Built with ❤️ for creators who'd rather make content than copy-paste links.
 
 <sub>Instagram comment to DM · Instagram auto DM · auto reply to Instagram comments · send link in Instagram DM ·
-follow to unlock · Instagram DM automation · open-source ManyChat alternative · Next.js · Vercel</sub>
+follow to unlock · Instagram DM automation · Instagram auto DM API · Make / Zapier / n8n · open-source ManyChat alternative · Next.js · Vercel</sub>
 
 </div>
