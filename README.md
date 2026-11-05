@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="public/logo.svg" width="90" alt="AutoDM logo" />
+<img src="public/logo.svg" width="90" alt="AutoDM logo: Instagram comment to DM automation" />
 
-# AutoDM
+# AutoDM: Open-Source Instagram Comment-to-DM Automation
 
-**Private Instagram comment-to-DM automation with a real follow-to-unlock gate.**
+**Self-hosted Instagram auto-DM tool with a real follow-to-unlock gate. A free, private alternative to paid DM automation SaaS.**
 
-Someone comments a keyword on your post → they get a DM → they tap a button → AutoDM checks
+Someone comments on your post or Reel → they get a DM → they tap a button → AutoDM checks
 that they actually follow you → only then does the link land in their inbox.
-One owner, one Next.js app, official Meta APIs only. No scraping, no browser bots, no third-party servers.
+One owner, one Next.js app, official Meta APIs. No scraping, no browser bots, no Instagram password.
 
 `Next.js 16 (one deployment)` · `Turso / libSQL` · `Vercel` · `Instagram API with Instagram Login`
 
@@ -17,13 +17,32 @@ One owner, one Next.js app, official Meta APIs only. No scraping, no browser bot
 <img src="https://img.shields.io/badge/Turso-libSQL-4FF8D2?style=for-the-badge&logo=turso&logoColor=black" alt="Turso" />
 <img src="https://img.shields.io/badge/Meta-official_API-E1306C?style=for-the-badge&logo=instagram&logoColor=white" alt="Official Instagram API" />
 
+<img src="docs/screenshots/overview.png" alt="AutoDM dashboard: Instagram comment-to-DM funnel with comments, DMs sent, follower checks and links delivered" width="100%" />
+
 </div>
 
 ---
 
+## 📖 What is AutoDM?
+
+AutoDM is a **self-hosted Instagram DM automation** app for creators and small brands. It turns comments, DMs
+and story replies into automatic Instagram direct messages: **comment a keyword (or anything at all) → get the
+link in your DMs**. Unlike most "comment to DM" tools, it can **require a follow before delivering the link**, and
+it checks the follow live through the official Instagram API instead of trusting a cached answer.
+
+It's a good fit if you want to:
+
+- **Grow Instagram followers** with follow-to-unlock content (presets, guides, discount pages, blog posts)
+- **Automatically send links in Instagram DMs** when people comment on a Reel
+- **Run Instagram auto-replies** on comments without paying a monthly per-contact SaaS fee
+- **Keep your data** in your own database on your own Vercel deployment
+
+
 ## ✨ What it does
 
-- **Comment → DM**: a keyword comment on one specific post/Reel (or any post) triggers a Meta **Private Reply**, the purpose-built comment-to-DM channel.
+- **Comment → DM**: a keyword comment (or **any comment**) on one specific post/Reel, or on any post, triggers a Meta **Private Reply**, the purpose-built comment-to-DM channel.
+- **Automation webhook**: `POST` a post id + link from Make, Zapier, n8n or a script and AutoDM creates the automation for that Reel, with a random message template.
+- **Ready-made message templates**: pick a tone (classic, hype, minimal, mystery, curious) instead of writing every DM from scratch.
 - **DM keyword replies**: someone DMs you `GUIDE` and the flow starts straight away.
 - **Story reply triggers**: someone replies `GUIDE` to your story and gets the same flow, routed to its own automations.
 - **Follow-to-unlock gate**: tapping **"Send me the link"** runs a follower check (`is_user_follow_business`):
@@ -78,18 +97,22 @@ Meta webhook ──► /api/webhooks/instagram ── verify HMAC ── store +
 - **Vercel Cron** hits `/api/cron` daily for token refresh, event retries and cleanup.
 - **Server Actions** handle every dashboard mutation; each one checks the owner session, and Next.js checks the Origin header (CSRF).
 
-## 🖥️ Screens
+## 🖥️ Screenshots
 
-All screens were designed in **Google Stitch** and ported to Tailwind v4:
+> Screenshots use demo data (fake account `@studio.nova`), not real users.
 
-| Screen | Highlights |
+| Automations list | Automation editor with live DM preview |
 |---|---|
-| **Login** | Owner-only sign-in, generic errors, live DB health pill |
-| **Overview** | KPI tiles, 5-step delivery funnel, recent activity, time-range tabs |
-| **Automations** | Summary metrics, keyword chips, pause/resume/edit/delete |
-| **Editor** | Trigger cards, match-mode picker, post grid, follow-gate toggle, live DM preview |
-| **Activity logs** | Status filters, messages, follower checks, failed events + Retry now |
-| **Settings** | Connection + token status, webhook config check, password change, safety rails |
+| <img src="docs/screenshots/automations.png" alt="List of Instagram auto-DM automations with keywords, match mode, matched and delivered counts" /> | <img src="docs/screenshots/editor.png" alt="Instagram comment-to-DM automation editor with trigger type, keywords and a live Instagram DM preview" /> |
+
+| Activity logs | Settings |
+|---|---|
+| <img src="docs/screenshots/logs.png" alt="Activity log of Instagram DMs sent, follower checks and failed webhooks" /> | <img src="docs/screenshots/settings.png" alt="Settings page with Instagram connection, token expiry and webhook configuration" /> |
+
+<details>
+<summary>Login screen</summary>
+<img src="docs/screenshots/login.png" alt="AutoDM owner-only login screen" />
+</details>
 
 ## 🚀 Quick start
 
@@ -171,8 +194,49 @@ tester to try it end to end. To trigger on the public, submit **App Review** for
 |---|---|---|
 | `GET/POST /api/webhooks/instagram` | Meta | Subscription handshake / signed events |
 | `GET /api/instagram/connect`, `/callback` | Owner | OAuth |
+| `POST /api/automations/webhook` | You (`Bearer AUTOMATION_WEBHOOK_SECRET`) | Create/update an any-comment automation for a post: `{ "post": "<media id or link>", "url": "https://…" }` |
+| `POST /api/webhooks/zernio` | Zernio (signed) | Button taps from Zernio-sent DMs; re-checks the follow live |
 | `GET /api/cron` | Vercel Cron (`Bearer CRON_SECRET`) | Token refresh, retries, cleanup |
 | `GET /api/health` | Anyone | DB reachability + version |
+
+## ❓ FAQ
+
+<details>
+<summary><b>Is it safe to automate Instagram DMs?</b></summary>
+
+AutoDM only uses Meta's official Instagram Platform APIs (Private Replies + Messaging), stays under the hourly DM
+limit, answers only inside the 24-hour messaging window and pauses itself on a policy block. It never logs in with
+your password or automates a browser.
+</details>
+
+<details>
+<summary><b>Can it DM people who comment anything, not just a keyword?</b></summary>
+
+Yes. Pick the **Any message** match mode and every comment on that post triggers the DM. Automations created through
+the webhook use any-comment by default.
+</details>
+
+<details>
+<summary><b>Does it really check that someone follows me?</b></summary>
+
+Yes. The follow check runs live on every "I've followed" tap. If Instagram can't confirm it, the link is held back
+instead of being sent anyway.
+</details>
+
+<details>
+<summary><b>How is this different from ManyChat or other comment-to-DM tools?</b></summary>
+
+AutoDM is open source and self-hosted: no per-contact pricing, your data stays in your own database, and the follow
+gate fails closed. It does one job (comment/DM/story reply → follow check → link), not full chatbot flows.
+</details>
+
+<details>
+<summary><b>Do I need Meta App Review?</b></summary>
+
+In development mode only accounts with a role on your Meta app trigger it. For the public, either pass App Review for
+the `manage_messages` / `manage_comments` permissions, or connect [Zernio](https://zernio.com), whose approved app
+delivers comments from anyone.
+</details>
 
 ## 📏 Known limits
 
@@ -182,7 +246,8 @@ tester to try it end to end. To trigger on the public, submit **App Review** for
 
 ## ⚠️ Disclaimer
 
-- AutoDM talks to Instagram **only** through Meta's official APIs, using **your own** Meta app and credentials.
+- AutoDM talks to Instagram **only** through Meta's official APIs, using **your own** Meta app and credentials
+  (or, if you set `ZERNIO_API_KEY`, through Zernio's Meta-approved app).
   It never scrapes, never automates a browser, and never asks for your Instagram password.
 - The safety rails are designed to keep you inside Meta's published limits, but **you** are responsible for how
   you use automation and for complying with Instagram's Terms of Use and Meta's Platform Policies.
@@ -193,5 +258,8 @@ tester to try it end to end. To trigger on the public, submit **App Review** for
 <div align="center">
 
 Built with ❤️ for creators who'd rather make content than copy-paste links.
+
+<sub>Instagram comment to DM · Instagram auto DM · auto reply to Instagram comments · send link in Instagram DM ·
+follow to unlock · Instagram DM automation · open-source ManyChat alternative · Next.js · Vercel</sub>
 
 </div>
